@@ -95,21 +95,19 @@ body { font-family:'Consolas','Monaco','Courier New',monospace; background:#1e1e
   </div>
 
   <div class="console-panel">
-    <div class="panel-header">Console</div>
+    <div class="panel-header">Activity Logging!!</div>
     <div class="panel-content console-content" id="console-logs"></div>
   </div>
 </div>
 </div>
 
-
 <script>
-
 let lastBackendLogCount = 0;
+let successTransferCount = 0;
 
 function addConsoleLog(message, type='info'){
-    if(typeof message === 'string' && message.includes("GNN optimization failed: 'BloodSupplyGNN' object has no attribute 'find_optimal_transfers'")) {
-        return;
-    }
+    // Remove GNN optimization warnings
+    if(typeof message === 'string' && message.includes("GNN optimization failed: 'BloodSupplyGNN' object has no attribute 'find_optimal_transfers'")) return;
 
     const container = document.getElementById('console-logs');
     const now = new Date();
@@ -120,23 +118,10 @@ function addConsoleLog(message, type='info'){
     container.appendChild(logEntry);
     container.scrollTop = container.scrollHeight;
     if(container.children.length > 100) container.removeChild(container.firstChild);
-}
 
-async function fetchBackendLogs() {
-    try {
-        const res = await fetch('/api/console_logs');
-        const logs = await res.json();
-
-        const newLogs = logs.slice(lastBackendLogCount)
-            .filter(log => 
-                !log.message.includes("GNN optimization failed: 'BloodSupplyGNN' object has no attribute 'find_optimal_transfers'")
-            );
-
-        newLogs.forEach(log => addConsoleLog(log.message, log.type));
-
-        lastBackendLogCount = logs.length;
-    } catch(e){
-        console.error("Error fetching backend logs:", e);
+    if(type === 'success'){
+        successTransferCount++;
+        document.getElementById('metric-transfers').textContent = successTransferCount;
     }
 }
 
@@ -144,7 +129,9 @@ async function fetchBackendLogs() {
     try {
         const res = await fetch('/api/console_logs');
         const logs = await res.json();
-        logs.slice(lastBackendLogCount).forEach(log => addConsoleLog(log.message, log.type));
+        const newLogs = logs.slice(lastBackendLogCount)
+            .filter(log => !log.message.includes("GNN optimization failed: 'BloodSupplyGNN' object has no attribute 'find_optimal_transfers'"));
+        newLogs.forEach(log => addConsoleLog(log.message, log.type));
         lastBackendLogCount = logs.length;
     } catch(e){
         console.error("Error fetching backend logs:", e);
@@ -154,22 +141,9 @@ async function fetchBackendLogs() {
 setInterval(fetchBackendLogs, 2000);
 
 let map, markers={}, transferLines=[];
-
 function initMap(){
     map = L.map('map').setView([40.7128,-74.0060],11);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-}
-
-function addConsoleLog(message,type='info'){
-    const container=document.getElementById('console-logs');
-    const now=new Date();
-    const timestamp=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-    const logEntry=document.createElement('div');
-    logEntry.className='log-entry';
-    logEntry.innerHTML=`<span class="log-time">${timestamp}</span><span class="log-message log-${type}">${message}</span>`;
-    container.appendChild(logEntry);
-    container.scrollTop = container.scrollHeight;
-    if(container.children.length>100) container.removeChild(container.firstChild);
 }
 
 async function loadMapData(){
@@ -181,7 +155,7 @@ async function loadMapData(){
         Object.values(markers).forEach(m=>map.removeLayer(m));
         transferLines.forEach(l=>map.removeLayer(l));
         markers={}; transferLines=[];
-        
+
         data.nodes.forEach(n=>{
             let iconHtml = n.kind==='hospital'?'🏥':n.kind==='bloodbank'?'🩸':null;
             if(!iconHtml) return;
@@ -220,12 +194,11 @@ function updateMetrics(data){
     const hospitals = data.nodes.filter(n=>n.kind==='hospital').length;
     const banks = data.nodes.filter(n=>n.kind==='bloodbank').length;
     const donors = data.nodes.filter(n=>n.kind==='donor').length;
-    const transfers = data.transfers.length;
 
     document.getElementById('metric-hospitals').textContent = hospitals;
     document.getElementById('metric-banks').textContent = banks;
     document.getElementById('metric-donors').textContent = donors;
-    document.getElementById('metric-transfers').textContent = transfers||'';
+    document.getElementById('metric-transfers').textContent = successTransferCount;
 }
 
 function updateLists(data){
